@@ -16,7 +16,7 @@ jobs:
       matrix:
         config:
         - {
-            os: windows-2019,
+            os: windows-2025,
             name: windows
           }
         - {

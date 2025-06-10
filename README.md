@@ -5,7 +5,7 @@ _Native C++ Binary Ninja plugin for removing opaque predicates_
 
 ## Description:
 
-This plugin removes conditional branches that always evaluate to the same value. Written in C++ for speed - faster than the [Python version](https://github.com/Vector35/OpaquePredicatePatcher/), especially on large binaries. Uses multiple threads to process functions in parallel, and will iteratively perform passes through functions to clean up newly uncovered opaque predicates.
+This plugin removes conditional branches that always evaluate to the same value. Written in C++ for speed - faster than the [Python version](https://github.com/Vector35/OpaquePredicatePatcher/), especially on large binaries. Uses multiple threads to process functions in parallel, and will iteratively perform passes through functions to clean up newly uncovered opaque predicates. You should be able to remove annoying opaque predicates from massive functions with ease and speed.
 
 ### Example
 

@@ -276,21 +276,14 @@ extern "C"
                         }
                         
                         size_t lastProcessed = 0;
-                        while (true) {
-                            bool allDone = true;
-                            for (auto& t : threads) {
-                                if (t.joinable()) {
-                                    allDone = false;
-                                    break;
-                                }
-                            }
-                            
-                            if (allDone)
-                                break;
-                                
+                        bool cancelLogged = false;
+                        while (processedFunctions.load() < totalFuncs) {
                             if (task->IsCancelled()) {
                                 shouldCancel.store(true);
-                                LogWarn("Cancelling operation...");
+                                if (!cancelLogged) {
+                                    LogWarn("Cancelling operation...");
+                                    cancelLogged = true;
+                                }
                             }
                             
                             size_t currentProcessed = processedFunctions.load();

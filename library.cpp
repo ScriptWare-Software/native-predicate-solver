@@ -9,6 +9,23 @@ extern "C"
 
         BINARYNINJAPLUGIN bool CorePluginInit()
     {
+        auto settings = Settings::Instance();
+        settings->RegisterGroup("nativePredicateSolver", "Native Predicate Solver");
+        settings->RegisterSetting("nativePredicateSolver.maxPassesPerFunction",
+            R"~({
+                            "title": "Max passes per function",
+                            "type": "number",
+                            "default": 10,
+                            "description": "Maximum number of passes to run when patching opaque predicates in a single function."
+                            })~");
+        settings->RegisterSetting("nativePredicateSolver.maxGlobalPasses",
+            R"~({
+                            "title": "Max global passes",
+                            "type": "number",
+                            "default": 20,
+                            "description": "Maximum number of global passes when patching all functions in the binary."
+                            })~");
+
         PluginCommand::Register(
             "Native Predicate Solver\\Patch Opaque Predicates (Current Function)",
             "Patch opaque predicates in current function",
@@ -45,7 +62,8 @@ extern "C"
 
                     int totalPatches = 0;
                     int pass = 1;
-                    const int maxPasses = 10;
+                    auto settings = Settings::Instance();
+                    const int maxPasses = static_cast<int>(settings->Get<int64_t>("nativePredicateSolver.maxPassesPerFunction", viewRef));
 
                     while (pass <= maxPasses) {
                         if (task->IsCancelled()) {
@@ -111,6 +129,8 @@ extern "C"
 
                     int globalPass = 1;
                     int totalGlobalPatches = 0;
+                    auto settings = Settings::Instance();
+                    const int maxGlobalPasses = static_cast<int>(settings->Get<int64_t>("nativePredicateSolver.maxGlobalPasses", viewRef));
 
                     while (true) {
                         if (task->IsCancelled()) {
@@ -148,8 +168,10 @@ extern "C"
 
                             int funcPatches = 0;
                             int pass = 1;
+                            auto settings = Settings::Instance();
+                            const int maxPassesPerFunction = static_cast<int>(settings->Get<int64_t>("nativePredicateSolver.maxPassesPerFunction", viewRef));
 
-                            while (pass <= 10) {
+                            while (pass <= maxPassesPerFunction) {
                                 int patchCount = 0;
 
                                 for (size_t i = 0; i < mlil->GetInstructionCount(); ++i) {
@@ -196,7 +218,7 @@ extern "C"
 
                         globalPass++;
 
-                        if (globalPass > 20) {
+                        if (globalPass > maxGlobalPasses) {
                             LogWarn("[!] Maximum passes reached");
                             break;
                         }

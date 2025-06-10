@@ -58,4 +58,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: ${{matrix.config.name}}-${{matrix.version.name}}
-        path: ${{github.workspace}}/build/*TestPlugin*
+        path: ${{github.workspace}}/build/*NativePredicateSolver*

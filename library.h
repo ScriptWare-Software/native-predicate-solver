@@ -27,6 +27,4 @@
 #include "mediumlevelilinstruction.h"
 #include <string>
 #include <exception>
-#include <fstream>
-#include <sstream>
 #endif //NATIVE_PREDICATE_SOLVER_LIBRARY_H

@@ -97,6 +97,10 @@ extern "C"
                         size_t instructionCount = mlil->GetInstructionCount();
 
                         for (size_t i = 0; i < instructionCount; ++i) {
+                            if (i % 100 == 0 && task->IsCancelled()) {
+                                break;
+                            }
+                            
                             auto instr = mlil->GetInstruction(i);
                             if (instr.operation != MLIL_IF)
                                 continue;
@@ -185,6 +189,10 @@ extern "C"
                     std::vector<PatchInfo> pendingPatches;
                     
                     for (size_t i = 0; i < mlil->GetInstructionCount(); ++i) {
+                        if (i % 100 == 0 && shouldCancel.load()) {
+                            break;
+                        }
+                        
                         auto instr = mlil->GetInstruction(i);
                         if (instr.operation != MLIL_IF)
                             continue;
@@ -202,6 +210,10 @@ extern "C"
                                 }
                             }
                         }
+                    }
+                    
+                    if (shouldCancel.load()) {
+                        break;
                     }
                     
                     if (pendingPatches.empty())

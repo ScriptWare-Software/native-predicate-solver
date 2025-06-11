@@ -4,6 +4,8 @@
 #include <atomic>
 #include <mutex>
 #include <chrono>
+#include <queue>
+#include <condition_variable>
 
 using namespace BinaryNinja;
 
@@ -139,6 +141,12 @@ extern "C"
                     }).detach();
             });
 
+        struct PatchInfo {
+            Ref<Architecture> arch;
+            uint64_t address;
+            bool alwaysBranch;
+        };
+
         auto processFunctionBatch = [](Ref<BinaryView> viewRef, 
                                        const std::vector<Ref<Function>>& funcBatch,
                                        int maxPassesPerFunction,
@@ -153,18 +161,28 @@ extern "C"
                     break;
                     
                 auto mlil = func->GetMediumLevelIL();
-                if (!mlil || mlil->GetInstructionCount() == 0)
+                if (!mlil || mlil->GetInstructionCount() == 0) {
+                    processedFunctions.fetch_add(1);
                     continue;
+                }
                     
                 auto arch = func->GetArchitecture();
-                if (!arch)
+                if (!arch) {
+                    processedFunctions.fetch_add(1);
                     continue;
+                }
+                
+                size_t instrCount = mlil->GetInstructionCount();
+                //if (instrCount > 10000) {
+                //    std::string funcName = func->GetSymbol() ? func->GetSymbol()->GetShortName() : "sub_" + std::to_string(func->GetStart());
+                //    LogInfo("Processing large function %s with %zu instructions", funcName.c_str(), instrCount);
+                //}
                     
                 int funcPatches = 0;
                 int pass = 1;
                 
                 while (pass <= maxPassesPerFunction) {
-                    int passPatchCount = 0;
+                    std::vector<PatchInfo> pendingPatches;
                     
                     for (size_t i = 0; i < mlil->GetInstructionCount(); ++i) {
                         auto instr = mlil->GetInstruction(i);
@@ -175,34 +193,33 @@ extern "C"
                         if (val.state == BNRegisterValueType::ConstantValue) {
                             if (val.value == 0) {
                                 if (viewRef->IsNeverBranchPatchAvailable(arch, instr.address)) {
-                                    {
-                                        std::lock_guard<std::mutex> lock(updateMutex);
-                                        viewRef->ConvertToNop(arch, instr.address);
-                                    }
-                                    passPatchCount++;
+                                    pendingPatches.push_back({arch, instr.address, false});
                                 }
                             }
                             else {
                                 if (viewRef->IsAlwaysBranchPatchAvailable(arch, instr.address)) {
-                                    {
-                                        std::lock_guard<std::mutex> lock(updateMutex);
-                                        viewRef->AlwaysBranch(arch, instr.address);
-                                    }
-                                    passPatchCount++;
+                                    pendingPatches.push_back({arch, instr.address, true});
                                 }
                             }
                         }
                     }
                     
-                    funcPatches += passPatchCount;
-                    
-                    if (passPatchCount == 0)
+                    if (pendingPatches.empty())
                         break;
-                        
+                    
                     {
                         std::lock_guard<std::mutex> lock(updateMutex);
+                        for (const auto& patch : pendingPatches) {
+                            if (patch.alwaysBranch) {
+                                viewRef->AlwaysBranch(patch.arch, patch.address);
+                            } else {
+                                viewRef->ConvertToNop(patch.arch, patch.address);
+                            }
+                        }
                         viewRef->UpdateAnalysis();
                     }
+                    
+                    funcPatches += pendingPatches.size();
                     pass++;
                 }
                 
@@ -255,24 +272,53 @@ extern "C"
                         std::atomic<size_t> processedFunctions(0);
                         std::mutex updateMutex;
                         
-                        std::vector<std::thread> threads;
-                        size_t functionsPerThread = (totalFuncs + threadCount - 1) / threadCount;
+                        std::queue<Ref<Function>> workQueue;
+                        std::mutex queueMutex;
+                        std::condition_variable cv;
+                        std::atomic<bool> workDone(false);
                         
-                        for (int tid = 0; tid < threadCount; tid++) {
-                            size_t startIdx = tid * functionsPerThread;
-                            size_t endIdx = std::min(startIdx + functionsPerThread, totalFuncs);
-                            
-                            if (startIdx >= totalFuncs)
-                                break;
+                        for (auto& func : functions) {
+                            workQueue.push(func);
+                        }
+                        
+                        auto worker = [&]() {
+                            while (true) {
+                                std::vector<Ref<Function>> localBatch;
                                 
-                            std::vector<Ref<Function>> funcBatch;
-                            for (size_t i = startIdx; i < endIdx; i++) {
-                                funcBatch.push_back(functions[i]);
+                                {
+                                    std::unique_lock<std::mutex> lock(queueMutex);
+                                    
+                                    cv.wait(lock, [&] { return !workQueue.empty() || workDone.load() || shouldCancel.load(); });
+                                    
+                                    if ((workDone.load() && workQueue.empty()) || shouldCancel.load())
+                                        break;
+                                    
+                                    size_t remaining = workQueue.size();
+                                    size_t batchSize = 1;
+                                    if (remaining > 100) {
+                                        batchSize = 5;
+                                    } else if (remaining > 50) {
+                                        batchSize = 3;
+                                    } else if (remaining > 20) {
+                                        batchSize = 2;
+                                    }
+                                    
+                                    for (size_t i = 0; i < batchSize && !workQueue.empty(); ++i) {
+                                        localBatch.push_back(workQueue.front());
+                                        workQueue.pop();
+                                    }
+                                }
+                                
+                                if (!localBatch.empty()) {
+                                    processFunctionBatch(viewRef, localBatch, maxPassesPerFunction,
+                                                       globalPatchCount, shouldCancel, updateMutex, processedFunctions);
+                                }
                             }
-                            
-                            threads.emplace_back(processFunctionBatch, viewRef, funcBatch, maxPassesPerFunction, 
-                                               std::ref(globalPatchCount), std::ref(shouldCancel), 
-                                               std::ref(updateMutex), std::ref(processedFunctions));
+                        };
+                        
+                        std::vector<std::thread> threads;
+                        for (int i = 0; i < threadCount; ++i) {
+                            threads.emplace_back(worker);
                         }
                         
                         size_t lastProcessed = 0;
@@ -298,6 +344,12 @@ extern "C"
                             
                             std::this_thread::sleep_for(std::chrono::milliseconds(100));
                         }
+                        
+                        {
+                            std::lock_guard<std::mutex> lock(queueMutex);
+                            workDone.store(true);
+                        }
+                        cv.notify_all();
                         
                         for (auto& t : threads) {
                             if (t.joinable())

@@ -29,13 +29,13 @@ jobs:
           }
         version:
         - name: v5.0.7290-stable
-          use-patch: false
+          filename: v5.0.7290-stable
         - name: v5.0.7648-stable
-          use-patch: false
+          filename: v5.0.7648-stable
         - name: stable/5.1.8005
-          use-patch: false
+          filename: v5.1.8005-stable
         - name: dev
-          use-patch: false
+          filename: dev
     steps:
     - uses: actions/checkout@v3
       with:
@@ -48,12 +48,6 @@ jobs:
         git fetch --tags
         git checkout --force ${{matrix.version.name}}
         git submodule update --init --recursive
-    - name: Patch api to allow building headlessly
-      if: ${{ matrix.version.use-patch }}
-      shell: bash
-      run: |
-        cd binaryninjaapi
-        git apply --verbose ${{matrix.version.patch-file}} 
     - name: Configure CMake
       run: cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
     - name: Build
@@ -61,5 +55,5 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ${{matrix.config.name}}-${{matrix.version.name}}
+        name: ${{matrix.config.name}}-${{matrix.version.filename}}
         path: ${{github.workspace}}/build/*NativePredicateSolver*

@@ -32,6 +32,8 @@ jobs:
           use-patch: false
         - name: v5.0.7648-stable
           use-patch: false
+        - name: v5.1.8005-stable
+          use-patch: false
         - name: dev
           use-patch: false
     steps:

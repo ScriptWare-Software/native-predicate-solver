@@ -34,7 +34,9 @@ jobs:
           filename: v5.0.7648-stable
         - name: stable/5.1.8005
           filename: v5.1.8005-stable
-        - name: dev
+        - name: stable/5.1.8104
+          filename: v5.1.8005-stable
+        - name: dev/5.2.8161
           filename: dev
     steps:
     - uses: actions/checkout@v3

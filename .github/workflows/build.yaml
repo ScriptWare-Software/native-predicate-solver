@@ -7,7 +7,7 @@ on:
     branches: [ "master" ]
 
 env:
-  BUILD_TYPE: RelWithDebInfo
+  BUILD_TYPE: Release
 
 jobs:
   build:
@@ -36,7 +36,7 @@ jobs:
           filename: v5.1.8005-stable
         - name: stable/5.1.8104
           filename: v5.1.8104-stable
-        - name: dev/5.2.8161
+        - name: dev
           filename: dev
     steps:
     - uses: actions/checkout@v3

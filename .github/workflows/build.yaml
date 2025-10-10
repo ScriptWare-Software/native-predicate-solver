@@ -133,13 +133,13 @@ jobs:
         git checkout --force ${{ matrix.version.name }}
         git submodule update --init --recursive
 
-    - name: Configure CMake
-      run: |
-        if [[ "${{ matrix.config.name }}" == "windows" ]]; then
-          cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBN_ALLOW_STUBS=ON -DPYTHON_COMMAND="python"
-        else
-          cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBN_ALLOW_STUBS=ON
-        fi
+    - name: Configure CMake (Windows)
+      if: matrix.config.name == 'windows'
+      run: cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBN_ALLOW_STUBS=ON -DPYTHON_COMMAND="python"
+
+    - name: Configure CMake (Unix)
+      if: matrix.config.name != 'windows'
+      run: cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBN_ALLOW_STUBS=ON
     
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}

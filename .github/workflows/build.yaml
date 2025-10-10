@@ -1,61 +1,246 @@
-name: Build
+name: Build and Release
 
 on:
   push:
     branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a new release'
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    # Check for updates daily at 2 AM UTC
+    - cron: '0 2 * * *'
 
 env:
   BUILD_TYPE: Release
 
 jobs:
+  # First, check if there are new Binary Ninja versions
+  check-versions:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      versions_matrix: ${{ steps.check.outputs.versions_matrix }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: 'true'
+        fetch-depth: 0
+    
+    - name: Check for new versions
+      id: check
+      run: |
+        cd binaryninjaapi
+        git fetch --tags origin
+        
+        # Always include dev
+        VERSIONS_JSON='[
+          {"name": "dev", "filename": "dev", "short_name": "dev", "full_version": "dev"}
+        ]'
+        
+        # Parse stable versions and filter for build numbers >= 7290
+        MIN_BUILD=7290
+        
+        # Get all tags that match either format: v*-stable or stable/*
+        ALL_TAGS=$(git tag -l 'v*-stable' 'stable/*' | sort -V)
+        
+        for tag in $ALL_TAGS; do
+          # Extract version number based on tag format
+          if [[ $tag == v*-stable ]]; then
+            # Old format: v5.0.7648-stable
+            VERSION=$(echo $tag | sed 's/^v//' | sed 's/-stable$//')
+          elif [[ $tag == stable/* ]]; then
+            # New format: stable/5.0.7648
+            VERSION=$(echo $tag | sed 's|stable/||')
+          else
+            continue
+          fi
+          
+          # Extract last 4 digits (build number)
+          BUILD_NUM=$(echo $VERSION | grep -oE '[0-9]{4}$')
+          
+          # Only include if build number >= 7290
+          if [[ ! -z "$BUILD_NUM" ]] && [[ $BUILD_NUM -ge $MIN_BUILD ]]; then
+            echo "Including version: $tag (build $BUILD_NUM, full version $VERSION)"
+            VERSIONS_JSON=$(echo $VERSIONS_JSON | jq --arg name "$tag" --arg filename "v$VERSION-stable" --arg short "$BUILD_NUM" --arg fullver "$VERSION" '. += [{"name": $name, "filename": $filename, "short_name": $short, "full_version": $fullver}]')
+          else
+            echo "Skipping version: $tag (build $BUILD_NUM < $MIN_BUILD)"
+          fi
+        done
+        
+        echo "versions_matrix=$VERSIONS_JSON" >> $GITHUB_OUTPUT
+        echo "Final versions matrix:"
+        echo "$VERSIONS_JSON" | jq '.'
+        
+        # Check if this is a scheduled run or manual dispatch with create_release
+        if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ inputs.create_release }}" == "true" ]]; then
+          echo "should_build=true" >> $GITHUB_OUTPUT
+        else
+          echo "should_build=false" >> $GITHUB_OUTPUT
+        fi
+
   build:
-    runs-on: ${{matrix.config.os}}
+    needs: check-versions
+    if: needs.check-versions.outputs.should_build == 'true' || github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ${{ matrix.config.os }}
     strategy:
       matrix:
         config:
         - {
-            os: windows-2025,
-            name: windows
+            os: windows-latest,
+            name: windows,
+            ext: dll
           }
         - {
             os: macos-13,
-            name: macos
+            name: macos,
+            ext: dylib
           }
         - {
             os: ubuntu-24.04,
-            name: ubuntu
+            name: ubuntu,
+            ext: so
           }
-        version:
-        - name: v5.0.7290-stable
-          filename: v5.0.7290-stable
-        - name: v5.0.7648-stable
-          filename: v5.0.7648-stable
-        - name: stable/5.1.8005
-          filename: v5.1.8005-stable
-        - name: stable/5.1.8104
-          filename: v5.1.8104-stable
-        - name: dev
-          filename: dev
+        version: ${{ fromJson(needs.check-versions.outputs.versions_matrix) }}
+    
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         submodules: 'true'
+    
     - uses: seanmiddleditch/gha-setup-ninja@master
+    
     - uses: ilammy/msvc-dev-cmd@v1
+      if: matrix.config.name == 'windows'
+    
     - name: Update submodule
       run: |
         cd binaryninjaapi
         git fetch --tags
-        git checkout --force ${{matrix.version.name}}
+        git checkout --force ${{ matrix.version.name }}
         git submodule update --init --recursive
+    
     - name: Configure CMake
       run: cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+    
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+    
+    - name: Rename artifacts
+      shell: bash
+      run: |
+        cd ${{github.workspace}}/build
+        
+        # Find the built library
+        if [[ "${{ matrix.config.ext }}" == "dll" ]]; then
+          ORIGINAL=$(find . -name "*NativePredicateSolver.dll" -o -name "*NativePredicateSolver*.dll" | head -n 1)
+        elif [[ "${{ matrix.config.ext }}" == "so" ]]; then
+          ORIGINAL=$(find . -name "libNativePredicateSolver.so" -o -name "libNativePredicateSolver*.so" | head -n 1)
+        else
+          ORIGINAL=$(find . -name "libNativePredicateSolver.dylib" -o -name "libNativePredicateSolver*.dylib" | head -n 1)
+        fi
+        
+        if [[ -z "$ORIGINAL" ]]; then
+          echo "Error: Could not find built library"
+          exit 1
+        fi
+        
+        # Determine new name based on version (consistent across all platforms)
+        if [[ "${{ matrix.version.full_version }}" == "dev" ]]; then
+          NEW_NAME="NativePredicateSolver-dev.${{ matrix.config.ext }}"
+        else
+          NEW_NAME="NativePredicateSolver-${{ matrix.version.full_version }}.${{ matrix.config.ext }}"
+        fi
+        
+        echo "Renaming $ORIGINAL to $NEW_NAME"
+        cp "$ORIGINAL" "$NEW_NAME"
+        echo "artifact_name=$NEW_NAME" >> $GITHUB_ENV
+    
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ${{matrix.config.name}}-${{matrix.version.filename}}
-        path: ${{github.workspace}}/build/*NativePredicateSolver*
+        name: ${{ matrix.config.name }}-${{ matrix.version.filename }}
+        path: ${{ github.workspace }}/build/${{ env.artifact_name }}
+
+  create-release:
+    needs: [check-versions, build]
+    if: needs.check-versions.outputs.should_build == 'true' || github.event.inputs.create_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+    
+    - name: Organize artifacts
+      run: |
+        mkdir -p release_files
+        find artifacts -type f \( -name "*.dll" -o -name "*.so" -o -name "*.dylib" \) -exec cp {} release_files/ \;
+        ls -la release_files/
+    
+    - name: Generate release notes
+      id: release_notes
+      run: |
+        RELEASE_DATE=$(date +'%Y-%m-%d %H:%M:%S UTC')
+        cat > release_notes.md << 'EOF'
+        ## 🤖 Automated Build
+        
+        This release was automatically generated by GitHub Actions.
+        
+        **Build Date:** $RELEASE_DATE
+        **Trigger:** ${{ github.event_name }}
+        
+        ### 📦 Included Builds
+        
+        This release contains builds for the following Binary Ninja versions:
+        
+        EOF
+        
+        # Add version info
+        echo "${{ needs.check-versions.outputs.versions_matrix }}" | jq -r '.[] | "- **Version \(.full_version)**: Build `\(.short_name)`"' >> release_notes.md
+        
+        cat >> release_notes.md << 'EOF'
+        
+        ### 📥 Installation
+        
+        1. Download the appropriate file for your platform and Binary Ninja version
+        2. Place it in your Binary Ninja plugins directory
+        3. Restart Binary Ninja
+        
+        ### 🔧 File Naming Convention
+        
+        All platforms use the same naming format:
+        
+        - **Stable versions**: `NativePredicateSolver-[full-version].[ext]`
+          - Example: `NativePredicateSolver-5.0.7290.dll`, `NativePredicateSolver-5.1.8104.so`
+        - **Dev version**: `NativePredicateSolver-dev.[ext]`
+          - Example: `NativePredicateSolver-dev.dll`, `NativePredicateSolver-dev.dylib`
+        
+        ---
+        
+        **Commit:** ${{ github.sha }}
+        EOF
+        
+        cat release_notes.md
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: build-${{ github.run_number }}-${{ github.sha }}
+        name: Automated Build ${{ github.run_number }}
+        body_path: release_notes.md
+        files: release_files/*
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

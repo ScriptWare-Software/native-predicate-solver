@@ -120,6 +120,11 @@ jobs:
     
     - uses: ilammy/msvc-dev-cmd@v1
       if: matrix.config.name == 'windows'
+
+    - name: Setup Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.13'
     
     - name: Update submodule
       run: |

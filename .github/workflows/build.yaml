@@ -73,9 +73,12 @@ jobs:
           fi
         done
         
-        echo "versions_matrix=$VERSIONS_JSON" >> $GITHUB_OUTPUT
         echo "Final versions matrix:"
         echo "$VERSIONS_JSON" | jq '.'
+
+        echo "versions_matrix<<EOF" >> $GITHUB_OUTPUT
+        echo "$VERSIONS_JSON" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
         
         # Check if this is a scheduled run or manual dispatch with create_release
         if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ inputs.create_release }}" == "true" ]]; then

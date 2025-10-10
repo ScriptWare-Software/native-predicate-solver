@@ -117,24 +117,29 @@ jobs:
         submodules: 'true'
     
     - uses: seanmiddleditch/gha-setup-ninja@master
-    
+
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
     - uses: ilammy/msvc-dev-cmd@v1
       if: matrix.config.name == 'windows'
 
-    - name: Setup Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: '3.13'
-    
     - name: Update submodule
       run: |
         cd binaryninjaapi
         git fetch --tags
         git checkout --force ${{ matrix.version.name }}
         git submodule update --init --recursive
-    
+
     - name: Configure CMake
-      run: cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBN_ALLOW_STUBS=ON
+      shell: bash
+      run: |
+        if [[ "${{ matrix.config.name }}" == "windows" ]]; then
+          cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBN_ALLOW_STUBS=ON -DPYTHON_COMMAND="python"
+        else
+          cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBN_ALLOW_STUBS=ON
+        fi
     
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}

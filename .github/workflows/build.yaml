@@ -126,18 +126,14 @@ jobs:
       with:
         python-version: '3.13'
 
-    - name: launcher wrapper
+    - name: Create py.exe
       if: matrix.config.name == 'windows'
       shell: powershell
       run: |
-        @'
-        @echo off
-        setlocal
-        set "args=%*"
-        set "args=%args:-3=%"
-        python %args%
-        '@ | Out-File -FilePath "$env:TEMP\py.cmd" -Encoding ASCII
-        echo "$env:TEMP" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        $pythonPath = (Get-Command python).Source
+        $pyPath = Join-Path (Split-Path $pythonPath) "py.exe"
+        Copy-Item $pythonPath $pyPath
+        echo (Split-Path $pythonPath) | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
     - name: Update submodule
       run: |

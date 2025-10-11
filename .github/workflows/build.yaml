@@ -126,6 +126,10 @@ jobs:
       with:
         python-version: '3.13'
 
+    - name: Install Python Launcher
+      shell: powershell
+      run: choco install python-launcher -y
+
     - name: Update submodule
       run: |
         cd binaryninjaapi
@@ -133,12 +137,7 @@ jobs:
         git checkout --force ${{ matrix.version.name }}
         git submodule update --init --recursive
 
-    - name: Configure CMake (Windows)
-      if: matrix.config.name == 'windows'
-      run: cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBN_ALLOW_STUBS=ON -DPYTHON_COMMAND="python"
-
-    - name: Configure CMake (Unix)
-      if: matrix.config.name != 'windows'
+    - name: Configure CMake
       run: cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBN_ALLOW_STUBS=ON
     
     - name: Build

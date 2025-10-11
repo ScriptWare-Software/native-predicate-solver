@@ -122,14 +122,15 @@ jobs:
       if: matrix.config.name == 'windows'
 
     - name: Setup Python
+      if: matrix.config.name != "windows"
       uses: actions/setup-python@v6
       with:
         python-version: '3.13'
 
-    - name: Install Python Launcher
+    - name: Setup Python (Windows)
       if: matrix.config.name == 'windows'
       shell: powershell
-      run: choco install python-launcher -y
+      run: choco install python313 -y
 
     - name: Update submodule
       run: |

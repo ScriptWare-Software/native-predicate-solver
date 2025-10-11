@@ -127,6 +127,7 @@ jobs:
         python-version: '3.13'
 
     - name: Install Python Launcher
+      if: matrix.config.name == 'windows'
       shell: powershell
       run: choco install python-launcher -y
 

@@ -67,7 +67,7 @@ jobs:
           # Only include if build number >= 7290
           if [[ ! -z "$BUILD_NUM" ]] && [[ $BUILD_NUM -ge $MIN_BUILD ]]; then
             echo "Including version: $tag (build $BUILD_NUM, full version $VERSION)"
-            VERSIONS_JSON=$(echo $VERSIONS_JSON | jq --arg name "$tag" --arg filename "v$VERSION-stable" --arg short "$BUILD_NUM" --arg fullver "$VERSION" '. += [{"name": $name, "filename": $filename, "short_name": $short, "full_version": $fullver}]')
+            VERSIONS_JSON=$(echo $VERSIONS_JSON | jq -c --arg name "$tag" --arg filename "v$VERSION-stable" --arg short "$BUILD_NUM" --arg fullver "$VERSION" '. += [{"name": $name, "filename": $filename, "short_name": $short, "full_version": $fullver}]')
           else
             echo "Skipping version: $tag (build $BUILD_NUM < $MIN_BUILD)"
           fi

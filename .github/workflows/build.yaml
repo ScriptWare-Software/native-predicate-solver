@@ -121,6 +121,11 @@ jobs:
     - uses: ilammy/msvc-dev-cmd@v1
       if: matrix.config.name == 'windows'
 
+    - uses: maxim-lobanov/setup-xcode@v1
+      if: matrix.config.name == 'macos'
+      with:
+        xcode-version: latest-stable
+    
     - name: Setup Python
       uses: actions/setup-python@v6
       with:

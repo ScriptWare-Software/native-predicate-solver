@@ -246,7 +246,7 @@ jobs:
         EOF
         
         # Add version info
-        echo "${{ needs.check-versions.outputs.versions_matrix }}" | jq -r '.[] | "- **Version \(.full_version)**: Build `\(.short_name)`"' >> release_notes.md
+        echo "${{ needs.check-versions.outputs.versions_matrix }}" | jq -c -r '.[] | "- **Version \(.full_version)**: Build `\(.short_name)`"' >> release_notes.md
         
         cat >> release_notes.md << 'EOF'
         

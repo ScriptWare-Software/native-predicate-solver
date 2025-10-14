@@ -139,18 +139,47 @@ jobs:
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
     
-    - name: Rename artifacts
+    - name: Rename artifacts (Windows)
+      if: matrix.config.name == 'windows'
+      shell: pwsh
+      run: |
+        $buildDir = "${{github.workspace}}\build"
+        Set-Location $buildDir
+        
+        # Find the built DLL
+        $original = Get-ChildItem -Recurse -Filter "*NativePredicateSolver*.dll" | Select-Object -First 1
+        
+        if ($null -eq $original) {
+          Write-Error "Error: Could not find built library"
+          exit 1
+        }
+        
+        Write-Host "Found: $($original.FullName)"
+        
+        # Determine new name based on version
+        if ("${{ matrix.version.full_version }}" -eq "dev") {
+          $newName = "NativePredicateSolver-dev.dll"
+        } else {
+          $newName = "NativePredicateSolver-${{ matrix.version.full_version }}.dll"
+        }
+        
+        Write-Host "Copying to: $newName"
+        Copy-Item -Path $original.FullName -Destination $newName
+        
+        # Set output for upload step
+        echo "artifact_name=$newName" >> $env:GITHUB_ENV
+    
+    - name: Rename artifacts (Unix)
+      if: matrix.config.name != 'windows'
       shell: bash
       run: |
         cd ${{github.workspace}}/build
         
         # Find the built library
-        if [[ "${{ matrix.config.ext }}" == "dll" ]]; then
-          ORIGINAL=$(find . -name "NativePredicateSolver.dll" -o -name "NativePredicateSolver*.dll" | head -n 1)
-        elif [[ "${{ matrix.config.ext }}" == "so" ]]; then
-          ORIGINAL=$(find . -name "libNativePredicateSolver.so" -o -name "libNativePredicateSolver*.so" | head -n 1)
+        if [[ "${{ matrix.config.ext }}" == "so" ]]; then
+          ORIGINAL=$(find . -type f -name "libNativePredicateSolver.so" -o -name "libNativePredicateSolver*.so" | head -n 1)
         else
-          ORIGINAL=$(find . -name "libNativePredicateSolver.dylib" -o -name "libNativePredicateSolver*.dylib" | head -n 1)
+          ORIGINAL=$(find . -type f -name "libNativePredicateSolver.dylib" -o -name "libNativePredicateSolver*.dylib" | head -n 1)
         fi
         
         if [[ -z "$ORIGINAL" ]]; then
@@ -158,14 +187,16 @@ jobs:
           exit 1
         fi
         
-        # Determine new name based on version (consistent across all platforms)
+        echo "Found: $ORIGINAL"
+        
+        # Determine new name based on version
         if [[ "${{ matrix.version.full_version }}" == "dev" ]]; then
           NEW_NAME="NativePredicateSolver-dev.${{ matrix.config.ext }}"
         else
           NEW_NAME="NativePredicateSolver-${{ matrix.version.full_version }}.${{ matrix.config.ext }}"
         fi
         
-        echo "Renaming $ORIGINAL to $NEW_NAME"
+        echo "Copying to: $NEW_NAME"
         cp "$ORIGINAL" "$NEW_NAME"
         echo "artifact_name=$NEW_NAME" >> $GITHUB_ENV
     

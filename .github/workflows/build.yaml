@@ -70,7 +70,7 @@ jobs:
 
   build:
     needs: check-versions
-    if: needs.check-versions.outputs.should_build == 'true' || github.event_name == 'push' || github.event_name == 'pull_request'
+    if: needs.check-versions.outputs.should_build == 'true' || github.event_name == 'pull_request'
     runs-on: ${{ matrix.config.os }}
     strategy:
       matrix:
@@ -163,7 +163,7 @@ jobs:
 
   create-release:
     needs: [check-versions, build]
-    if: needs.check-versions.outputs.should_build == 'true' || github.event.inputs.create_release == 'true' || github.event_name == 'push'
+    if: needs.check-versions.outputs.should_build == 'true' || github.event.inputs.create_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write

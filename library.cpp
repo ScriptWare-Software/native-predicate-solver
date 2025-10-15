@@ -6,7 +6,6 @@
 #include <chrono>
 #include <queue>
 #include <condition_variable>
-
 using namespace BinaryNinja;
 
 extern "C"

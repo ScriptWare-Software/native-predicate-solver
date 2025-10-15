@@ -36,8 +36,27 @@ find_path(
 )
 add_subdirectory(${BN_API_PATH} api)
 
+set(Z3_BUILD_LIBZ3_SHARED OFF CACHE BOOL "Build Z3 as a static library" FORCE)
+set(Z3_BUILD_EXECUTABLE OFF CACHE BOOL "Don't build Z3 executable" FORCE)
+set(Z3_BUILD_TEST_EXECUTABLES OFF CACHE BOOL "Don't build Z3 test executables" FORCE)
+set(Z3_ENABLE_EXAMPLE_TARGETS OFF CACHE BOOL "Don't build Z3 examples" FORCE)
+set(Z3_BUILD_PYTHON_BINDINGS OFF CACHE BOOL "Don't build Python bindings" FORCE)
+set(Z3_BUILD_DOTNET_BINDINGS OFF CACHE BOOL "Don't build .NET bindings" FORCE)
+set(Z3_BUILD_JAVA_BINDINGS OFF CACHE BOOL "Don't build Java bindings" FORCE)
+add_subdirectory(z3)
+
+if(TARGET libz3)
+    target_include_directories(libz3 INTERFACE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/z3/src/api/c++>
+    )
+endif()
+
+if(NOT TARGET z3::libz3)
+    add_library(z3::libz3 ALIAS libz3)
+endif()
+
 add_library(${PROJECT_NAME} SHARED library.cpp)
 
-target_link_libraries(${PROJECT_NAME} PUBLIC binaryninjaapi)
+target_link_libraries(${PROJECT_NAME} PUBLIC binaryninjaapi z3::libz3)
 
 bn_install_plugin(${PROJECT_NAME})

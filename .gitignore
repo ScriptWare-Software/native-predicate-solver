@@ -1,4 +1,4 @@
 build
 /.vs
 binaryninjaapi
-.claude
+/tests
